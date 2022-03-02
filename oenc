@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+
+var oencrypt = require('./oencrypt.js');
+
+process.stdin.setEncoding('binary');
+
+new Promise((resolve, reject) => {
+        let data = "";
+
+        process.stdin.on("data", chunk => data += chunk);
+        process.stdin.on("end", () => resolve(data));
+        process.stdin.on("error", error => reject(error));
+}).then(async (data) => {
+	var decrypt_mode = false;
+	var options = {};
+	options.password = 'test';
+	for (let i = 2; i < process.argv.length; i++) {
+		switch(process.argv[i]) {
+			case '-d': decrypt_mode = true; break;
+			case '-S': options.salt = process.argv[++i]; break;
+			case '-iter': options.iter = parseInt(process.argv[++i]); break;
+			case '-aes-256-ctr': options.cipher = "aes-256-ctr"; break;
+			case '-aes-256-cbc': options.cipher = "aes-256-cbc"; break;
+			case '-nosaltmagic': options.salt_magic = ''; break;
+			case '-saltmagic': options.salt_magic = process.argv[++i]; break;
+			case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
+			case '-noderiveit': options.derive_it = false; break;
+			case '-base64': options.base64 = true;
+			default: break;
+		}
+	}
+
+	return (decrypt_mode) ?
+		await oencrypt.decrypt(data, options) :
+		await oencrypt.encrypt(data, options);
+}).catch((e) => {
+	console.log(`Error - ${e}`);
+}).then(data => { process.stdout.write(Buffer.from(data), 'binary'); });
