@@ -2,37 +2,91 @@
 
 var oencrypt = require('./oencrypt.js');
 
+const readline = require('readline');
+const tty = require('tty');
+const fs = require('fs');
+
+function get_password(prompt) {
+	return new Promise((resolve, reject) => {
+		var input = new tty.ReadStream(fs.openSync('/dev/tty', 'r'))
+		input.setRawMode( true );
+		const rl = readline.createInterface({
+			input: input,
+			output: process.stderr
+		});
+		var writeToOutput = rl._writeToOutput;
+		rl.question(prompt, (answer)=> {
+			resolve(answer);
+			input.setRawMode( false );
+			rl.close();
+			input.destroy();
+			console.error();
+		}, ()=> {
+			reject();
+		});
+		rl._writeToOutput = function _writeToOutput(s) {};
+	});
+}
+
 process.stdin.setEncoding('binary');
+
+var options = {};
+options.decrypt_mode = false;
+for (let i = 2; i < process.argv.length; i++) {
+	switch(process.argv[i]) {
+		case '-d': options.decrypt_mode = true; break;
+		case '-S': options.salt = process.argv[++i]; break;
+		case '-iter': options.iter = parseInt(process.argv[++i]); break;
+		case '-aes-256-ctr': options.cipher = "aes-256-ctr"; break;
+		case '-aes-256-cbc': options.cipher = "aes-256-cbc"; break;
+		case '-nosaltmagic': options.salt_magic = ''; break;
+		case '-saltmagic': options.salt_magic = process.argv[++i]; break;
+		case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
+		case '-noderiveit': options.derive_it = false; break;
+		case '-base64': options.base64 = true;
+		case '-key': options.key = oencrypt.hex_to_buffer(process.argv[++i]); break;
+		case '-key-is-offset': options.key_is_offset = true; break;
+		case '-pass': options.password = process.argv[++i]; break;
+		case '-new-pass': options.new_password = process.argv[++i]; break;
+		case '-genkey': options.decrypt_mode = undefined; break;
+		default: console.error('unknown ' + process.argv[i]); process.exit(0); break;
+	}
+}
 
 new Promise((resolve, reject) => {
         let data = "";
+	if(options.decrypt_mode === undefined) { resolve(''); return; }
 
         process.stdin.on("data", chunk => data += chunk);
         process.stdin.on("end", () => resolve(data));
         process.stdin.on("error", error => reject(error));
 }).then(async (data) => {
-	var decrypt_mode = false;
-	var options = {};
-	options.password = 'test';
-	for (let i = 2; i < process.argv.length; i++) {
-		switch(process.argv[i]) {
-			case '-d': decrypt_mode = true; break;
-			case '-S': options.salt = process.argv[++i]; break;
-			case '-iter': options.iter = parseInt(process.argv[++i]); break;
-			case '-aes-256-ctr': options.cipher = "aes-256-ctr"; break;
-			case '-aes-256-cbc': options.cipher = "aes-256-cbc"; break;
-			case '-nosaltmagic': options.salt_magic = ''; break;
-			case '-saltmagic': options.salt_magic = process.argv[++i]; break;
-			case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
-			case '-noderiveit': options.derive_it = false; break;
-			case '-base64': options.base64 = true;
-			default: break;
+
+	if(options.password === undefined && ( options.decrypt_mode === true || ( options.key !== undefined && options.decrypt_mode === undefined))) {
+
+		options.password = await get_password((options.decrypt_mode === undefined ? 'Old ' : '') + 'Password: ');
+	}
+	if(options.new_password === undefined && (options.password === undefined || (options.decrypt_mode === undefined && options.key !== undefined)) && (options.decrypt_mode === false || options.decrypt_mode === undefined)) {
+		while(1) {
+			var prefix = (options.decrypt_mode === undefined ? 'New ' : '');
+			var pw1 = await get_password(prefix + 'Password: ');
+			var pw2 = await get_password(prefix + 'Password (verify): ');
+			if(pw1 == pw2) { options.new_password = pw1; break }
 		}
 	}
 
-	return (decrypt_mode) ?
+	if(options.password === undefined) { options.password = options.new_password; }
+	if(options.new_password === undefined) { options.new_password = options.password; }
+
+	if(options.decrypt_mode === undefined) {
+		var key = await oencrypt.gen_key(options);
+		if(key === undefined) { throw('Key/password mismatch'); }
+		return oencrypt.buffer_to_hex(key) + "\n";
+	}
+
+	return (options.decrypt_mode) ?
 		await oencrypt.decrypt(data, options) :
 		await oencrypt.encrypt(data, options);
 }).catch((e) => {
-	console.log(`Error - ${e}`);
+	console.error(`Error - ${e}`);
 }).then(data => { process.stdout.write(Buffer.from(data), 'binary'); });

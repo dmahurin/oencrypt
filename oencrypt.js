@@ -3,6 +3,13 @@
 const crypto = typeof(window) !== 'undefined' ? window.crypto : require('crypto');
 
 function fill_options(options) {
+	if(typeof options.key == 'string') { options.key = hex_to_buffer(options.key); }
+
+	if(options.key !== undefined && options.key_salt === undefined) {
+		options.key_salt = options.key.slice(0,8);
+		options.key = options.key.slice(8);
+	}
+
 	if(options.iter === undefined) { options.iter = 10000; }
 	if(options.salt_magic === undefined) { options.salt_magic = 'Salted__'; }
 	if(options.derive_it === undefined) { options.derive_it = true; }
@@ -10,6 +17,10 @@ function fill_options(options) {
 	if(options.cipher === undefined) { options.cipher = 'aes-256-ctr'; }
 
 	return options;
+}
+
+function buffer_to_string(b) {
+	return new TextDecoder().decode(b);
 }
 
 function string_to_buffer(s) {
@@ -40,12 +51,21 @@ function hex_to_buffer (s) {
 	return new Uint8Array(s.match(/../g).map(n => parseInt(n, 16)));
 }
 
+function buffer_to_hex (buff) {
+	return  new Uint8Array(buff).reduce((out, n) => (out + ('0' + n.toString(16)).slice(-2)),'');
+}
+
 const get_password_key = (password) =>
 	crypto.subtle.importKey("raw", (new TextEncoder()).encode(password), "PBKDF2", false, [
 		"deriveBits",
 	]);
 
-const derive_bits = (password_key, salt, options) =>
+const get_hkdf_key = (key) =>
+	crypto.subtle.importKey("raw", key, "HKDF", false, [
+		"deriveBits",
+	]);
+
+const derive_bits = (password_key, salt, options, length) =>
 	crypto.subtle.deriveBits({
 		name: "PBKDF2",
 		salt: salt,
@@ -53,30 +73,132 @@ const derive_bits = (password_key, salt, options) =>
 		hash: { name: "SHA-256" },
 	},
 		password_key,
-		options.derive_it ? 384 : 256
+		length !== undefined ? length : (options.derive_it ? 384 : 256)
 	);
 
-const derive_key = (key, keyUsage, options) =>
+const derive_hkdf_bits = (password_key, salt, options, length) =>
+	crypto.subtle.deriveBits({
+		name: "HKDF",
+		salt: salt,
+		info: new Uint8Array(),
+		iterations: options.iter,
+		hash: { name: "SHA-256" },
+	},
+		password_key,
+		length !== undefined ? length : (options.derive_it ? 384 : 256)
+	);
+
+const derive_key = (key, keyUsage, options, cipher) =>
 	crypto.subtle.importKey(
 		"raw",
 		key,
-		{ name: options.cipher == 'aes-256-ctr' ? "AES-CTR" : "AES-CBC" },
+		{ name: cipher !== undefined ? cipher : (options.cipher == 'aes-256-ctr' ? "AES-CTR" : "AES-CBC") },
 		true,
 		keyUsage
 	);
+
+function buffer_to_bigint(buffer) {
+    let result = 0n;
+    let base = 1n;
+    new Uint8Array(buffer).reverse().forEach(function (n) {
+        result = result + base * BigInt(n);
+        base <<= 8n;
+    });
+    return result;
+}
+
+function bigint_to_buffer(n, size) {
+	
+    let result = new Uint8Array(size !== undefined ? size : 48);
+    let i = 0;
+    while (n > 0n) {
+        result[i] = Number(n % 256n);
+        n >>= 8n;
+        i += 1;
+    }
+    return result.reverse();
+}
+
+async function lock_key(key, salt, password, options) {
+	const password_key = await get_password_key(password);
+	if(options.key_is_offset) {
+		const password_key_bits = await derive_bits(password_key, salt, options, 256);
+		return bigint_to_buffer((buffer_to_bigint(key) - buffer_to_bigint(password_key_bits) + (2n ** 256n)) % (2n ** 256n));
+	} else {
+		const password_key_bits = await derive_bits(password_key, salt, options, 384);
+		const aes_key = await derive_key(password_key_bits.slice(0, 32), ["encrypt"], options, 'AES-CTR');
+		const iv = password_key_bits.slice(32, 32 + 16);
+		return new Uint8Array(await crypto.subtle.encrypt({name: "AES-CTR", counter: iv, iv: iv, length: 128}, aes_key, key));
+
+	}
+}
+
+async function unlock_key(key, salt, password, options) {
+	if(options.key_is_offset) {
+		// key offset and added to the password pbkdf2
+		const password_key = await get_password_key(password);
+		const password_key_n = buffer_to_bigint(await derive_bits(password_key, salt, options, 256));
+		return bigint_to_buffer((buffer_to_bigint(key) + password_key_n) % (2n ** 256n), 32);
+	} else {
+		// key is encrypted with iv and key derived from password pdkdf2 
+		const password_key = await get_password_key(password);
+		const password_key_bits = await derive_bits(password_key, salt, options, 384);
+		const key_aes_key = await derive_key(password_key_bits.slice(0, 32), ["decrypt"], options, 'AES-CTR');
+		const key_iv = password_key_bits.slice(32, 32 + 16);
+		return await crypto.subtle.decrypt({name: "AES-CTR", counter: key_iv, iv: key_iv, length: 128}, key_aes_key, key);
+	}
+}
+
+async function gen_key(options) {
+	options = fill_options(options);
+	var salt;
+	var key;
+	if(options.key === undefined) {
+		salt = crypto.getRandomValues(new Uint8Array(8));
+		key = crypto.getRandomValues(new Uint8Array(32));
+	} else {
+		salt = crypto.getRandomValues(new Uint8Array(8));
+		key = await unlock_key(options.key, options.key_salt, options.password, options);
+	}
+	var new_key = await lock_key(key, salt, options.new_password, options);
+	if(options.key !== undefined) {
+		var s = 'validate';
+		var e = await encrypt(string_to_buffer(s), options);
+		options.key = new_key;
+		options.key_salt = salt;
+		options.password = options.new_password;
+		if(s != buffer_to_string(await decrypt(e, options))) {
+			return undefined;
+		}
+	}
+	var salt_key = new Uint8Array(salt.length + new_key.length);
+	salt_key.set(salt);
+	salt_key.set(new_key, salt.length);
+	return salt_key;
+}
 
 async function encrypt(data, options) {
 	options = fill_options(options);
 
 	data = string_to_buffer(data);
-	const salt = options.salt !== undefined ? hexstring_to_array(options.salt.padStart(16, "0")).slice(0,8) : crypto.getRandomValues(new Uint8Array(8));
-	var iv = crypto.getRandomValues(new Uint8Array(16));
-	const password_key = await get_password_key(options.password);
- 
-	const aes_key_bits = await derive_bits(password_key, salt, options);
+	const salt = options.salt !== undefined ? hex_to_buffer(options.salt.padStart(16, "0")).slice(0,8) : crypto.getRandomValues(new Uint8Array(8));
+
+	var aes_key_bits;
+	if( options.key === undefined) {
+		const password_key = await get_password_key(options.password);
+		aes_key_bits = await derive_bits(password_key, salt, options);
+	} else {
+		const hkdf_key = await get_hkdf_key(await unlock_key(options.key, options.key_salt, options.password, options));
+		aes_key_bits = await derive_hkdf_bits(hkdf_key, salt, options);
+	}
 
 	const aes_key = await derive_key(aes_key_bits.slice(0, 32), ["encrypt"], options);
-	if(options.derive_it) iv = aes_key_bits.slice(32, 32 + 16);
+
+	var iv;
+
+	if(!options.derive_it) { iv = crypto.getRandomValues(new Uint8Array(16)); }
+	else if(iv === undefined) { iv = aes_key_bits.slice(32, 32 + 16);}
+
 	data = await crypto.subtle.encrypt({
 		name: options.cipher == "aes-256-ctr" ? "AES-CTR" : "AES-CBC",
 		counter: iv,
@@ -117,15 +239,25 @@ async function decrypt(data, options) {
 	offset += 8;
 	var iv;
 
+	var aes_key_bits;
+	if( options.key === undefined) {
+		const password_key = await get_password_key(options.password);
+		aes_key_bits = await derive_bits(password_key, salt, options);
+	} else {
+		const hkdf_key = await get_hkdf_key(await unlock_key(options.key, options.key_salt, options.password, options));
+		aes_key_bits = await derive_hkdf_bits(hkdf_key, salt, options);
+	}
+
 	if(!options.derive_it) {
 		iv = data.slice(offset, offset + 16);
 		offset += 16;
+	} else {
+		iv = aes_key_bits.slice(32, 32 + 16);
 	}
 	data = data.slice(offset);
-	const password_key = await get_password_key(options.password);
-	const aes_key_bits = await derive_bits(password_key, salt, options);
+
 	const aes_key = await derive_key(aes_key_bits.slice(0, 32), ["decrypt"], options);
-	if(options.derive_it) { iv = aes_key_bits.slice(32, 32 + 16); }
+
 	data = await crypto.subtle.decrypt({
 		name: options.cipher == "aes-256-ctr" ? "AES-CTR" : "AES-CBC",
 		counter: iv,
@@ -141,4 +273,7 @@ async function decrypt(data, options) {
 if(typeof(exports) !== 'undefined') {
 	exports.encrypt = encrypt;
 	exports.decrypt = decrypt;
+	exports.buffer_to_hex = buffer_to_hex;
+	exports.hex_to_buffer = hex_to_buffer;
+	exports.gen_key = gen_key;
 }
