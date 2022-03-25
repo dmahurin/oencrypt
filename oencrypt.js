@@ -33,7 +33,7 @@ function string_to_buffer(s) {
 
 function buffer_to_base64(buff) {
 	if(typeof Buffer !== 'undefined') {
-		return Buffer.from(buff).toString('base64') + "\n";
+		return Buffer.from(buff).toString('base64');
 	} else  {
 		return(btoa(String.fromCharCode.apply(null, buff)));
 	}
@@ -163,12 +163,12 @@ async function gen_key(options) {
 	var new_key = await lock_key(key, salt, options.new_password, options);
 	if(options.key !== undefined) {
 		var s = 'validate';
-		var e = await encrypt(string_to_buffer(s), options);
+		var e = await encrypt(s, options);
 		options.key = new_key;
 		options.key_salt = salt;
 		options.password = options.new_password;
 		if(s != buffer_to_string(await decrypt(e, options))) {
-			return undefined;
+			throw("key/password check failed");
 		}
 	}
 	var salt_key = new Uint8Array(salt.length + new_key.length);
@@ -180,7 +180,8 @@ async function gen_key(options) {
 async function encrypt(data, options) {
 	options = fill_options(options);
 
-	data = string_to_buffer(data);
+	if(typeof data == 'string') { data = string_to_buffer(data); }
+
 	const salt = options.salt !== undefined ? hex_to_buffer(options.salt.padStart(16, "0")).slice(0,8) : crypto.getRandomValues(new Uint8Array(8));
 
 	var aes_key_bits;
@@ -220,7 +221,7 @@ async function encrypt(data, options) {
 	if(!options.derive_it) { dataout.set(iv, offset); offset += iv.byteLength; }
 	dataout.set(data, offset);
 
-	if(options.base64) dataout = buffer_to_base64(dataout);
+	if(options.base64) dataout = buffer_to_base64(dataout) + "\n";
 	return dataout;
 }
 

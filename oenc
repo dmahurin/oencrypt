@@ -43,8 +43,8 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-saltmagic': options.salt_magic = process.argv[++i]; break;
 		case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
 		case '-noderiveit': options.derive_it = false; break;
-		case '-base64': options.base64 = true;
-		case '-key': options.key = oencrypt.hex_to_buffer(process.argv[++i]); break;
+		case '-base64': options.base64 = true; break;
+		case '-key': options.key = oencrypt.hex_to_buffer(process.argv[++i] + "\n"); break;
 		case '-key-is-offset': options.key_is_offset = true; break;
 		case '-pass': options.password = process.argv[++i]; break;
 		case '-new-pass': options.new_password = process.argv[++i]; break;
@@ -89,4 +89,5 @@ new Promise((resolve, reject) => {
 		await oencrypt.encrypt(data, options);
 }).catch((e) => {
 	console.error(`Error - ${e}`);
+	console.error(e.stack);
 }).then(data => { process.stdout.write(Buffer.from(data), 'binary'); });
