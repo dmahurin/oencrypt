@@ -1,0 +1,106 @@
+<html>
+<head>
+<script src="oencrypt.js"></script>
+<script>
+function set_key() {
+	var textarea = document.getElementById('key-area');
+	localStorage.setItem("key", textarea.value);
+	window.location.href = '#set_key';
+}
+
+function change_password() {
+	var key = localStorage.getItem("key");
+	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
+	var old_password = sessionStorage.getItem("password");
+	if(key !== undefined && (old_password == null || old_password == "")) { alert('no current password'); return; }
+
+	var new_password = document.getElementById('password-new').value;
+	var new_password_confirm = document.getElementById('password-new-confirm').value;
+	if(new_password != new_password_confirm) { alert('password mismatch' + new_password + new_password_confirm); return; }
+	if(new_password == "") { alert('empty password'); return; }
+
+	var options = { "password": old_password, "new_password": new_password, "key": key !== undefined ? key : undefined };
+	gen_key(options).catch(e => {
+		console.error(e.stack);
+		alert("key change failed " + e);
+	}).then(key => {
+		console.log('SSSS');
+		console.log(key);
+		if(key !== undefined) { localStorage.setItem("key", buffer_to_hex(key)); sessionStorage.setItem('password', new_password) }
+	});
+}
+
+function set_password() {
+	var password = document.getElementById('password').value;
+	console.log(password);
+	if(password != '') sessionStorage.setItem('password', password)
+}
+
+function decrypt_test() {
+	var key = localStorage.getItem("key");
+
+	var password = sessionStorage.getItem("password");
+	if(password == null || password == "") { alert('no password entered'); return ; }
+	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	var text = base64_to_buffer(document.getElementById("encrypted_text").value);
+	if(!text) { return; }
+
+	var options = { "password": password, "key": key };
+	decrypt(text, options).then(data => {
+		document.getElementById("decrypted_text").value = buffer_to_string(data);
+		document.getElementById("encrypted_text").value = "";
+	});
+}
+
+function encrypt_test() {
+	var key = localStorage.getItem("key");
+	var password = sessionStorage.getItem("password");
+	if(password == null || password == "") { alert('no password entered'); return ; }
+	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	var text = document.getElementById("decrypted_text").value;
+	if(!text) { return; }
+
+	console.log("pass " + password);
+
+	var options = { "password": password, "key": key };
+	encrypt(text, options).then(data => {
+		document.getElementById("decrypted_text").value = "";
+		document.getElementById("encrypted_text").value = buffer_to_base64(data);
+	});
+}
+
+</script>
+</head>
+<body>
+
+ <form>
+  <input type="password" id="password"/>
+  <label>Password</label>
+
+  <button type="reset" onclick="set_password();">Set Password</button>
+ </form>
+
+ <textarea id="decrypted_text">This is a test</textarea>
+ <button onclick="encrypt_test();">Encrypt</button>
+ <textarea id="encrypted_text"></textarea>
+ <button onclick="decrypt_test();">Decrypt</button>
+
+ <form>
+  <input type="password" id="password-new"/>
+  <label>New Password</label>
+
+  <input type="password" id="password-new-confirm"/>
+  <label>New Password (confirm)</label>
+
+  <button type="reset" onclick="change_password();">Change Key Password</button>
+ </form>
+
+ <form>
+  <textarea id="key-area" rows="4"></textarea>
+  <label>Key</label>
+
+  <button type="reset" onclick="set_key();">Import Key</button>
+ </form>
+
+</body>
+</html>
