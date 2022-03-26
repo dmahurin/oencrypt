@@ -3,7 +3,7 @@
 const crypto = typeof(window) !== 'undefined' ? window.crypto : require('crypto');
 
 function fill_options(options) {
-	if(typeof options.key == 'string') { options.key = hex_to_buffer(options.key); }
+	if(typeof options.key == 'string') { options.key = base64_to_buffer(options.key); }
 
 	if(options.key !== undefined && options.key_salt === undefined) {
 		options.key_salt = options.key.slice(0,8);
@@ -276,5 +276,7 @@ if(typeof(exports) !== 'undefined') {
 	exports.decrypt = decrypt;
 	exports.buffer_to_hex = buffer_to_hex;
 	exports.hex_to_buffer = hex_to_buffer;
+	exports.base64_to_buffer = base64_to_buffer;
+	exports.buffer_to_base64 = buffer_to_base64;
 	exports.gen_key = gen_key;
 }

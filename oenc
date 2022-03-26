@@ -44,7 +44,7 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
 		case '-noderiveit': options.derive_it = false; break;
 		case '-base64': options.base64 = true; break;
-		case '-key': options.key = oencrypt.hex_to_buffer(process.argv[++i] + "\n"); break;
+		case '-key': options.key = oencrypt.base64_to_buffer(process.argv[++i] + "\n"); break;
 		case '-key-is-offset': options.key_is_offset = true; break;
 		case '-pass': options.password = process.argv[++i]; break;
 		case '-new-pass': options.new_password = process.argv[++i]; break;
@@ -81,7 +81,7 @@ new Promise((resolve, reject) => {
 	if(options.decrypt_mode === undefined) {
 		var key = await oencrypt.gen_key(options);
 		if(key === undefined) { throw('Key/password mismatch'); }
-		return oencrypt.buffer_to_hex(key) + "\n";
+		return oencrypt.buffer_to_base64(key) + "\n";
 	}
 
 	return (options.decrypt_mode) ?

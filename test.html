@@ -5,12 +5,11 @@
 function set_key() {
 	var textarea = document.getElementById('key-area');
 	localStorage.setItem("key", textarea.value);
-	window.location.href = '#set_key';
 }
 
 function change_password() {
 	var key = localStorage.getItem("key");
-	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
+	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
 	var old_password = sessionStorage.getItem("password");
 	if(key !== undefined && (old_password == null || old_password == "")) { alert('no current password'); return; }
 
@@ -24,24 +23,20 @@ function change_password() {
 		console.error(e.stack);
 		alert("key change failed " + e);
 	}).then(key => {
-		console.log('SSSS');
-		console.log(key);
-		if(key !== undefined) { localStorage.setItem("key", buffer_to_hex(key)); sessionStorage.setItem('password', new_password) }
+		if(key !== undefined) { localStorage.setItem("key", buffer_to_base64(key)); sessionStorage.setItem('password', new_password) }
 	});
 }
 
 function set_password() {
 	var password = document.getElementById('password').value;
-	console.log(password);
 	if(password != '') sessionStorage.setItem('password', password)
 }
 
 function decrypt_test() {
 	var key = localStorage.getItem("key");
-
 	var password = sessionStorage.getItem("password");
 	if(password == null || password == "") { alert('no password entered'); return ; }
-	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
 	var text = base64_to_buffer(document.getElementById("encrypted_text").value);
 	if(!text) { return; }
 
@@ -56,11 +51,9 @@ function encrypt_test() {
 	var key = localStorage.getItem("key");
 	var password = sessionStorage.getItem("password");
 	if(password == null || password == "") { alert('no password entered'); return ; }
-	if(key == null || key == "" || (key = hex_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
 	var text = document.getElementById("decrypted_text").value;
 	if(!text) { return; }
-
-	console.log("pass " + password);
 
 	var options = { "password": password, "key": key };
 	encrypt(text, options).then(data => {
