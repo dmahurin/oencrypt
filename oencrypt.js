@@ -1,5 +1,7 @@
 'use strict';
 
+(function(exports) {
+
 const crypto = typeof(window) !== 'undefined' ? window.crypto : require('crypto');
 
 function fill_options(options) {
@@ -271,12 +273,28 @@ async function decrypt(data, options) {
 	return data;
 }
 
-if(typeof(exports) !== 'undefined') {
-	exports.encrypt = encrypt;
-	exports.decrypt = decrypt;
-	exports.buffer_to_hex = buffer_to_hex;
-	exports.hex_to_buffer = hex_to_buffer;
-	exports.base64_to_buffer = base64_to_buffer;
-	exports.buffer_to_base64 = buffer_to_base64;
-	exports.gen_key = gen_key;
+if(exports === undefined && typeof(window) !== 'undefined' && typeof(document) !== 'undefined') {
+	var scripts = document.getElementsByTagName("script");
+	var currentScript = document.currentScript || scripts[scripts.length-1];
+	var name;
+	if(currentScript.hasAttribute('data-name')) {
+		name = currentScript.getAttribute('data-name');
+	} else if (currentScript.src != "") {
+		name = currentScript.src; name = name.substring(name.lastIndexOf('/') + 1); name = name.substring(0, name.indexOf('.'));
+	} else {
+		name = "oencrypt";
+	}
+	window[name] = {};
+	exports = window[name];
 }
+
+exports.encrypt = encrypt;
+exports.decrypt = decrypt;
+exports.gen_key = gen_key;
+exports.buffer_to_hex = buffer_to_hex;
+exports.hex_to_buffer = hex_to_buffer;
+exports.buffer_to_base64 = buffer_to_base64;
+exports.base64_to_buffer = base64_to_buffer;
+exports.buffer_to_string = buffer_to_string;
+
+})(typeof(exports) !== 'undefined' ? exports: undefined);

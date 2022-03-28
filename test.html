@@ -9,7 +9,7 @@ function set_key() {
 
 function change_password() {
 	var key = localStorage.getItem("key");
-	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
+	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
 	var old_password = sessionStorage.getItem("password");
 	if(key !== undefined && (old_password == null || old_password == "")) { alert('no current password'); return; }
 
@@ -19,11 +19,11 @@ function change_password() {
 	if(new_password == "") { alert('empty password'); return; }
 
 	var options = { "password": old_password, "new_password": new_password, "key": key !== undefined ? key : undefined };
-	gen_key(options).catch(e => {
+	oencrypt.gen_key(options).catch(e => {
 		console.error(e.stack);
 		alert("key change failed " + e);
 	}).then(key => {
-		if(key !== undefined) { localStorage.setItem("key", buffer_to_base64(key)); sessionStorage.setItem('password', new_password) }
+		if(key !== undefined) { localStorage.setItem("key", oencrypt.buffer_to_base64(key)); sessionStorage.setItem('password', new_password) }
 	});
 }
 
@@ -36,13 +36,13 @@ function decrypt_test() {
 	var key = localStorage.getItem("key");
 	var password = sessionStorage.getItem("password");
 	if(password == null || password == "") { alert('no password entered'); return ; }
-	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
-	var text = base64_to_buffer(document.getElementById("encrypted_text").value);
+	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	var text = oencrypt.base64_to_buffer(document.getElementById("encrypted_text").value);
 	if(!text) { return; }
 
 	var options = { "password": password, "key": key };
-	decrypt(text, options).then(data => {
-		document.getElementById("decrypted_text").value = buffer_to_string(data);
+	oencrypt.decrypt(text, options).then(data => {
+		document.getElementById("decrypted_text").value = oencrypt.buffer_to_string(data);
 		document.getElementById("encrypted_text").value = "";
 	});
 }
@@ -51,14 +51,14 @@ function encrypt_test() {
 	var key = localStorage.getItem("key");
 	var password = sessionStorage.getItem("password");
 	if(password == null || password == "") { alert('no password entered'); return ; }
-	if(key == null || key == "" || (key = base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
 	var text = document.getElementById("decrypted_text").value;
 	if(!text) { return; }
 
 	var options = { "password": password, "key": key };
-	encrypt(text, options).then(data => {
+	oencrypt.encrypt(text, options).then(data => {
 		document.getElementById("decrypted_text").value = "";
-		document.getElementById("encrypted_text").value = buffer_to_base64(data);
+		document.getElementById("encrypted_text").value = oencrypt.buffer_to_base64(data);
 	});
 }
 
