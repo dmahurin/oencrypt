@@ -9,14 +9,15 @@ function set_key() {
 
 function change_password() {
 	var key = localStorage.getItem("key");
+	if(key == null || key == "") { key = document.getElementById('key-area').value; }
 	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40 ) { alert('no key. resetting'); key = undefined; }
 	var old_password = sessionStorage.getItem("password");
-	if(key !== undefined && (old_password == null || old_password == "")) { alert('no current password'); return; }
+	if(key !== undefined && (old_password == null || old_password == "")) { alert('no current password'); return false; }
 
 	var new_password = document.getElementById('password-new').value;
 	var new_password_confirm = document.getElementById('password-new-confirm').value;
-	if(new_password != new_password_confirm) { alert('password mismatch' + new_password + new_password_confirm); return; }
-	if(new_password == "") { alert('empty password'); return; }
+	if(new_password != new_password_confirm) { alert('password mismatch' + new_password + new_password_confirm); return false; }
+	if(new_password == "") { alert('empty password'); return false; }
 
 	var options = { "password": old_password, "new_password": new_password, "key": key !== undefined ? key : undefined };
 	oencrypt.gen_key(options).catch(e => {
@@ -25,6 +26,7 @@ function change_password() {
 	}).then(key => {
 		if(key !== undefined) { localStorage.setItem("key", oencrypt.buffer_to_base64(key)); sessionStorage.setItem('password', new_password) }
 	});
+	return true;
 }
 
 function set_password() {
@@ -62,6 +64,25 @@ function encrypt_test() {
 	});
 }
 
+function test_image () {
+	var key = localStorage.getItem("key");
+	var password = sessionStorage.getItem("password");
+	if(password == null || password == "") { alert('no password entered'); return ; }
+	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+
+	var options = { 'password': password, 'key': key, 'base64': true, 'cipher': 'aes-256-ctr' };
+	var data = document.getElementById("test-image-encrypted").value;
+	oencrypt.decrypt(data, options)
+	.catch( e => {  alert('decrypt error: ' + e); })
+	.then(data => {
+		data = new Blob( [ data ], { type: "image/jpeg" } );
+		var urlCreator = window.URL || window.webkitURL;
+		var imageURL = urlCreator.createObjectURL( data );
+		var img = document.getElementById("test-image");
+		img.src = imageURL;
+		img.onload = () => { imageURL.revokeObjectURL(img.src); img.onload = undefined; }
+	});
+}
 </script>
 </head>
 <body>
@@ -70,7 +91,7 @@ function encrypt_test() {
   <input type="password" id="password"/>
   <label>Password</label>
 
-  <button type="reset" onclick="set_password();">Set Password</button>
+  <button type="reset" onclick="set_password();">Enter Password</button>
  </form>
 
  <textarea id="decrypted_text">This is a test</textarea>
@@ -78,22 +99,29 @@ function encrypt_test() {
  <textarea id="encrypted_text"></textarea>
  <button onclick="decrypt_test();">Decrypt</button>
 
- <form>
+ <form onreset="document.getElementById('key-form').reset();">
   <input type="password" id="password-new"/>
   <label>New Password</label>
 
   <input type="password" id="password-new-confirm"/>
   <label>New Password (confirm)</label>
 
-  <button type="reset" onclick="change_password();">Change Key Password</button>
+  <button type="reset" onclick="return change_password();">Change Key Password</button>
  </form>
 
- <form>
-  <textarea id="key-area" rows="4"></textarea>
+ <form id="key-form" onreset="document.getElementById('key-area').value=''; return false;">
+  <textarea id="key-area" rows="4">3sQ1pfudQvgW8+vAaGVpSSv18yiucLTLEVVDg8x+/PxNehTuvuueVw==</textarea>
   <label>Key</label>
 
   <button type="reset" onclick="set_key();">Import Key</button>
  </form>
+
+ <form>
+<textarea rows="8" id="test-image-encrypted">U2FsdGVkX192huXFZPJq+UhO3KyH2SNwIdpU3E/8YqYHNGmwWPjXP8ICp/APRMa7L7qj2bsXrd2MLA4kPjGKIiTSkbT7FBCes5intJyPlilHoqQttRN+udd3/Lwl4BZj7Ib/AGyCwPFDKogGUFI4mHpt5Tzok/l3aQgjCniiw/HZC532rEJS4gLCQ7+amvJ654pCEm7c+Qku2Gk9+6a/2qm8Bc0Ir7vyM/HMs8WEYCs7ryv8KueXEoUbXaXvkR9HpzOV2EsfmhueYhFo/v8CE0QBaKAn4TEZ+PcSRkqenwUFMllapM2ZZJYuXkfQR/kKabySATO6Bs4E8OfVhspGqPedZYoGVpU3MIHFu3y8H3TeH8mjbB5/mJPgCmVArBRFtr7lLwy87osz1web0GvTA+uIU2DsykJk2QROcT8SKNy75XckMEW9XXb+nvN/60lEemnDkv9r4DhNBYDbRqVxrsKCIzt5fH7aZ3wUmXPKs/fxVa+tuzAZsiDhACWifqLs56b2fDRDwThlfCId6kQo773LWnbnLzUqhAM3bd8Hq1LtJc4jssGokWzJCKyluRsIHn9YJzrnNo/QkyF8w3dqaQ//lXzCAULEenpUt5vGtAgXUHwgXb5c6jacAhisvbmAtlQnVoiNXAoiRBMwOPDkYlSdg7edYH07H0ub+Gdzh9r9wAFk7l/IyIsRYAO4TksTfNpzeuZobcr2SWMMkuob+3skz+bg+e6yaME8TKLxBLnk6U6toYuYLh9hpcGBA+omlyw2+KvCf4oE4Iu1KHM0usmARsrcqday+kemUj9VjVVpW5RwEnri7aLmVtE+8fn/rDx/Y88xe7b6vFEVwLLlkP0fD3jv7oueK3quJvWic43I97PahG2MSkZfsAQH2YEtl9uR31nZeU+c/M9hNQG37RvBme8b1rlmJ/IDQpFy+INVvWUNxpTbxws3V9oj5J0iXSQ/9y0HyUGbPCbP2eAvnTduPq4IUKAuncKiqlLstEv5MNLuuhZu0PG8HANVm8HCi/ZKtsmwIzHROqI29MdgZJzFn/KNZM8vYHI+HdzxszFbV+4jwGWm4S+7ccJWsLXorm6tQieTOIXQi9Uvk89hg3u2PV+G7rHUMiGuxegtNy1F/YwYh2xI9GvUZXwSxCG560zj2SYc+5IkCw0SxQljnQt4nymiB8jKg+cfm5ur5vGtswRYkJFb</textarea>
+  <button type="reset" onclick="test_image();">Test Image</button>
+ </form>
+
+ <img id="test-image"/>
 
 </body>
 </html>
