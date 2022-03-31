@@ -39,6 +39,7 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-iter': options.iter = parseInt(process.argv[++i]); break;
 		case '-aes-256-ctr': options.cipher = "aes-256-ctr"; break;
 		case '-aes-256-cbc': options.cipher = "aes-256-cbc"; break;
+		case '-counter-offset': options.counter_offset = process.argv[++i]; break;
 		case '-nosaltmagic': options.salt_magic = ''; break;
 		case '-saltmagic': options.salt_magic = process.argv[++i]; break;
 		case '-saltmagic-ossl': options.salt_magic = 'Salted__'; break;
@@ -49,6 +50,8 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-pass': options.password = process.argv[++i]; break;
 		case '-new-pass': options.new_password = process.argv[++i]; break;
 		case '-genkey': options.command = 'genkey'; break;
+		case '-getinfo': options.command = 'getinfo'; break;
+		case '-no-file-salt': options.no_file_salt = true; break;
 		default: console.error('unknown ' + process.argv[i]); process.exit(0); break;
 	}
 }
@@ -85,6 +88,10 @@ new Promise((resolve, reject) => {
 			return oencrypt.buffer_to_base64(key) + "\n";
 		case 'decrypt': return await oencrypt.decrypt(data, options);
 		case 'encrypt': return await oencrypt.encrypt(data, options);
+		case 'getinfo':
+			var info = oencrypt.get_info(data, options);
+			info.salt = oencrypt.buffer_to_hex(info.salt);
+			return JSON.stringify(info) + "\n";
 	}
 }).catch((e) => {
 	console.error(`Error - ${e}`);

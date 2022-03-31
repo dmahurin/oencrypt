@@ -6,6 +6,7 @@ const crypto = typeof(window) !== 'undefined' ? window.crypto : require('crypto'
 
 function fill_options(options) {
 	if(typeof options.key == 'string') { options.key = base64_to_buffer(options.key); }
+	if(typeof options.salt == 'string') { options.salt = hex_to_buffer(options.salt.padStart(16, "0")).slice(0,8); }
 
 	if(options.key !== undefined && options.key_salt === undefined) {
 		options.key_salt = options.key.slice(0,8);
@@ -202,6 +203,11 @@ async function encrypt(data, options) {
 	if(!options.derive_it) { iv = crypto.getRandomValues(new Uint8Array(16)); }
 	else if(iv === undefined) { iv = aes_key_bits.slice(32, 32 + 16);}
 
+	if(options.counter_offset !== undefined) {
+		iv = new Uint8Array(iv);
+		iv = bigint_to_buffer(buffer_to_bigint(iv) + BigInt(options.counter_offset),16);
+	}
+
 	data = await crypto.subtle.encrypt({
 		name: options.cipher == "aes-256-ctr" ? "AES-CTR" : "AES-CBC",
 		counter: iv,
@@ -227,11 +233,10 @@ async function encrypt(data, options) {
 	return dataout;
 }
 
-async function decrypt(data, options) {
+function get_info(data, options) {
 	options = fill_options(options);
 
-	if(options.base64) data = base64_to_buffer(data);
-	else if(typeof(data) == 'string') data = string_to_buffer(data) ;
+	if(typeof data == 'string') { data = string_to_buffer(data); }
 
 	var offset = 0;
 	var salt = data.slice(0, 8);
@@ -240,6 +245,28 @@ async function decrypt(data, options) {
 		salt = data.slice(offset, offset + 8);
 	}
 	offset += 8;
+
+	return { 'salt': salt, 'data-offset': offset, 'block-size': 16};
+}
+
+async function decrypt(data, options) {
+	options = fill_options(options);
+
+	if(options.base64) data = base64_to_buffer(data);
+	else if(typeof(data) == 'string') data = string_to_buffer(data) ;
+
+	var offset = 0;
+	var salt;
+	if(options.no_file_salt) {
+		salt = options.salt;
+	} else {
+		salt = data.slice(0, 8);
+		if(options.salt_magic !== '' && (new TextDecoder()).decode(salt) === options.salt_magic) {
+			offset += 8;
+			salt = data.slice(offset, offset + 8);
+		}
+		offset += 8;
+	}
 	var iv;
 
 	var aes_key_bits;
@@ -260,6 +287,10 @@ async function decrypt(data, options) {
 	data = data.slice(offset);
 
 	const aes_key = await derive_key(aes_key_bits.slice(0, 32), ["decrypt"], options);
+
+	if(options.counter_offset !== undefined) {
+		iv = bigint_to_buffer(buffer_to_bigint(iv) + BigInt(options.counter_offset),16);
+	}
 
 	data = await crypto.subtle.decrypt({
 		name: options.cipher == "aes-256-ctr" ? "AES-CTR" : "AES-CBC",
@@ -291,6 +322,7 @@ if(exports === undefined && typeof(window) !== 'undefined' && typeof(document) !
 exports.encrypt = encrypt;
 exports.decrypt = decrypt;
 exports.gen_key = gen_key;
+exports.get_info = get_info;
 exports.buffer_to_hex = buffer_to_hex;
 exports.hex_to_buffer = hex_to_buffer;
 exports.buffer_to_base64 = buffer_to_base64;
