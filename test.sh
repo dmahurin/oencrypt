@@ -10,6 +10,8 @@ failed () {
 trap '[ $? -eq 0 ] || failed' EXIT
 
 validate="validate"
+validate4="1234"
+validate8="ABCDEFGH"
 pass="test"
 pass2="check"
 iter=10000
@@ -29,5 +31,8 @@ test="offset key rekey" ; test "$validate" = "$(echo "$validate" | ./oenc -key-i
 test="openssl aes-ctr defaults" && test "$validate" = "$(echo "$validate" | openssl enc -aes-256-ctr -pbkdf2 -pass pass:"$pass" | ./oenc -pass "$pass" -d)" ; passed
 test="openssl aes-ctr" ; test "$validate" = "$(echo "$validate" | openssl enc -aes-256-ctr -pbkdf2 -pass pass:"$pass" -iter "$iter" | ./oenc -aes-256-ctr -pass "$pass" -d)" ; passed
 test="openssl aes-cbc" ; test "$validate" = "$(echo "$validate" | openssl enc -aes-256-cbc -pbkdf2 -pass pass:"$pass" -iter "$iter" | ./oenc -aes-256-cbc -pass "$pass" -d)" ; passed
+test="partial decrypt" ; test "$validate" = "$(echo "${validate8}${validate8}${validate4}${validate}" | ./oenc -pass "$pass" | ./oenc -pass "$pass" -d -start 20 )" ; passed
+test="partial decrypt with end" ; test "$validate4" = "$(echo "${validate8}${validate8}${validate4}${validate}" | ./oenc -pass "$pass" | ./oenc -pass "$pass" -d -start 16 -end 20 )" ; passed
+test="partial decrypt from file with enc"; test ! -d /dev/shm -o "$validate4" = "$(tmpfile=$(mktemp -u -p /dev/shm); echo "${validate8}${validate8}${validate4}${validate}" | ./oenc -pass "$pass" > "$tmpfile"; ./oenc -pass "$pass" -d -start 16 -end 20 -in "$tmpfile"; rm -f "$tmpfile" )" ; passed
 
 echo "Success"

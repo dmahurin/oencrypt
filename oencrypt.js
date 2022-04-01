@@ -246,7 +246,7 @@ function get_info(data, options) {
 	}
 	offset += 8;
 
-	return { 'salt': salt, 'data-offset': offset, 'block-size': 16};
+	return { 'salt': salt, 'data_offset': offset, 'block_size': 16};
 }
 
 async function decrypt(data, options) {

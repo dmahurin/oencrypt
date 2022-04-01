@@ -52,13 +52,26 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-genkey': options.command = 'genkey'; break;
 		case '-getinfo': options.command = 'getinfo'; break;
 		case '-no-file-salt': options.no_file_salt = true; break;
+		case '-in': options.in_file = process.argv[++i]; break;
+		case '-start': options.start = parseInt(process.argv[++i]); break;
+		case '-end': options.end = parseInt(process.argv[++i]); break;
 		default: console.error('unknown ' + process.argv[i]); process.exit(0); break;
+	}
+}
+
+async function get_file_data(file, start, end) {
+	if(start !== undefined && end != undefined) {
+		if(start === undefined) { start = 0; }
+		if(end === undefined) { end = (await fs.promises.stat(file)).size; }
+		return (await (fs.promises.open(file).then(f => f.read(Buffer.alloc(end-start), 0, end-start, start)))).buffer;
+	} else {
+		return await fs.promises.readFile(file);
 	}
 }
 
 new Promise((resolve, reject) => {
         let data = "";
-	if(options.command == 'genkey') { resolve(''); return; }
+	if(options.command == 'genkey' || options.in_file !== undefined ) { resolve(''); return; }
 
         process.stdin.on("data", chunk => data += chunk);
         process.stdin.on("end", () => resolve(data));
@@ -73,6 +86,7 @@ new Promise((resolve, reject) => {
 		while(1) {
 			var prefix = (options.command == 'genkey' ? 'New ' : '');
 			var pw1 = await get_password(prefix + 'Password: ');
+			var pw1 = await get_password(prefix + 'Password: ');
 			var pw2 = await get_password(prefix + 'Password (verify): ');
 			if(pw1 == pw2) { options.new_password = pw1; break }
 		}
@@ -81,12 +95,49 @@ new Promise((resolve, reject) => {
 	if(options.password === undefined) { options.password = options.new_password; }
 	if(options.new_password === undefined) { options.new_password = options.password; }
 
+	var offset_start;
+	var offset_end;
+	var trim_start;
+	var trim_end;
+
+	if(options.in_file !== undefined && (options.start !== undefined || options.end !== undefined)) {
+		data = await get_file_data(options.in_file, 0, 32);
+	}
+	if(options.start !== undefined || options.end !== undefined) {
+		var file_info = oencrypt.get_info(data, options);
+		data_offset = file_info.data_offset;
+		if(options.start !== undefined && options.start != 0) {
+			var bstart = Math.floor(options.start / file_info.block_size);
+			options.counter_offset = bstart;
+			offset_start = file_info.data_offset + bstart * file_info.block_size;
+			trim_start = options.start - (bstart * file_info.block_size);
+			options.salt = file_info.salt;
+			options.no_file_salt = true;
+		}
+		if(options.end !== undefined) {
+			if(offset_start === undefined) offset_start = 0;
+			offset_end = file_info.data_offset + file_info.block_size * Math.ceil(options.end / file_info.block_size);
+			if(trim_start === undefined) trim_start = 0;
+			trim_end = trim_start + options.end - options.start;
+		}
+	}
+	if(options.in_file !== undefined) {
+		data = await get_file_data(options.in_file, offset_start, offset_end);
+	} else if(offset_start !== undefined || offset_end !== undefined) {
+		data = data.slice(offset_start, offset_end);
+	}
+
 	switch (options.command) {
 		case 'genkey':
 			var key = await oencrypt.gen_key(options);
 			if(key === undefined) { throw('Key/password mismatch'); }
 			return oencrypt.buffer_to_base64(key) + "\n";
-		case 'decrypt': return await oencrypt.decrypt(data, options);
+		case 'decrypt':
+			data = await oencrypt.decrypt(data, options);
+			if(trim_start !== undefined || trim_end !== undefined) {
+				data = data.slice(trim_start, trim_end);
+			}
+			return data;
 		case 'encrypt': return await oencrypt.encrypt(data, options);
 		case 'getinfo':
 			var info = oencrypt.get_info(data, options);
