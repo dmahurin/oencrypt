@@ -83,6 +83,20 @@ function test_image () {
 		img.onload = () => { imageURL.revokeObjectURL(img.src); img.onload = undefined; }
 	});
 }
+
+function fetch_test() {
+	var key = localStorage.getItem("key");
+	var password = sessionStorage.getItem("password");
+	if(password == null || password == "") { alert('no password entered'); return ; }
+	if(key == null || key == "" || (key = oencrypt.base64_to_buffer(key)) == "" || key.length < 40) { alert('invalid key'); return ; }
+	var options = { 'password': password, 'key': key, 'cipher': 'aes-256-ctr' };
+	oencrypt.fetch("test.txt.aes.bin", undefined, options)
+                        .catch(e => { console.error(e.stack); console.error("fetch error: " + e); })
+                        .then(res => res.text()).then(text => alert(text));
+	oencrypt.fetch("test.txt.aes.bin", {'headers': { 'range': 'bytes=17-20'}}, options)
+                        .catch(e => { console.error(e.stack); console.error("fetch error: " + e); })
+                        .then(res => res.text()).then(text => alert(text));
+}
 </script>
 </head>
 <body>
@@ -122,6 +136,10 @@ function test_image () {
  </form>
 
  <img id="test-image"/>
+
+ <form>
+  <button type="reset" onclick="fetch_test();">Fetch test</button>
+ </form>
 
 </body>
 </html>
