@@ -93,7 +93,7 @@ function fetch_test() {
 	oencrypt.fetch("test.txt.aes.bin", undefined, options)
                         .catch(e => { console.error(e.stack); console.error("fetch error: " + e); })
                         .then(res => res.text()).then(text => alert(text));
-	oencrypt.fetch("test.txt.aes.bin", {'headers': { 'range': 'bytes=17-20'}}, options)
+	oencrypt.fetch("test.txt.aes.bin", {'headers': { 'range': 'bytes=17-19'}}, options)
                         .catch(e => { console.error(e.stack); console.error("fetch error: " + e); })
                         .then(res => res.text()).then(text => alert(text));
 }

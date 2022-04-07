@@ -312,11 +312,18 @@ async function oencrypt_fetch(url, fetch_options, oencrypt_options) {
 	if(fetch_options !== undefined && fetch_options.headers !== undefined && fetch_options.headers.range !== undefined) {
 		var bytes=fetch_options.headers.range.split('=')[1].split('-');
 		var start = parseInt(bytes[0]);
-		var end = parseInt(bytes[1]);
+		var end = parseInt(bytes[1]) + 1;
 		fetch_options = Object.assign({}, fetch_options);
 		fetch_options.headers = Object.assign({}, fetch_options.headers);
-		fetch_options.headers.range = 'bytes=0-32';
-		var file_info = get_info(await((await fetch(url, fetch_options)).arrayBuffer()), oencrypt_options);
+		fetch_options.headers.range = 'bytes=0-31';
+		var response = await fetch(url, fetch_options);
+		var data = await response.arrayBuffer();
+		if(response.status != 206) {
+			console.warn('server does not support range request');
+			data = await decrypt(data.slice(start, end), oencrypt_options);
+			return new Response(data);
+		}
+		var file_info = get_info(data, oencrypt_options);
 
 		var bstart = Math.floor(start / file_info.block_size);
 		var oencrypt_options = Object.assign({}, oencrypt_options);
@@ -327,14 +334,13 @@ async function oencrypt_fetch(url, fetch_options, oencrypt_options) {
 		var offset_start = file_info.data_offset + bstart * file_info.block_size;
 		var offset_end = file_info.data_offset + file_info.block_size * Math.ceil(end / file_info.block_size);
 
-		fetch_options.headers.range = 'bytes=' + offset_start.toString() + '-' + offset_end.toString();
+		fetch_options.headers.range = 'bytes=' + offset_start.toString() + '-' + (offset_end - 1).toString();
 
 		trim_start = start - (bstart * file_info.block_size);
 		trim_end = trim_start + end - start;
 	}
 
-	var response = await fetch(url, fetch_options);
-	var data = await response.arrayBuffer();
+	var data = await fetch(url, fetch_options).then(response => response.arrayBuffer());
 	data = await decrypt(data, oencrypt_options);
 	if(trim_end !== undefined) {
 		data = data.slice(trim_start, trim_end);
