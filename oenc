@@ -53,6 +53,7 @@ for (let i = 2; i < process.argv.length; i++) {
 		case '-getinfo': options.command = 'getinfo'; break;
 		case '-no-file-salt': options.no_file_salt = true; break;
 		case '-in': options.in_file = process.argv[++i]; break;
+		case '-out': options.out_file = process.argv[++i]; break;
 		case '-start': options.start = parseInt(process.argv[++i]); break;
 		case '-end': options.end = parseInt(process.argv[++i]); break;
 		default: console.error('unknown ' + process.argv[i]); process.exit(0); break;
@@ -147,4 +148,10 @@ new Promise((resolve, reject) => {
 }).catch((e) => {
 	console.error(`Error - ${e}`);
 	console.error(e.stack);
-}).then(data => { process.stdout.write(Buffer.from(data), 'binary'); });
+}).then(data => {
+	if(options.out_file !== undefined) {
+		fs.writeFile(options.out_file, Buffer.from(data), 'binary', (err) => { console.error('Cannot write to ' + options.out_file);});
+	} else {
+		process.stdout.write(Buffer.from(data), 'binary');
+	}
+});
